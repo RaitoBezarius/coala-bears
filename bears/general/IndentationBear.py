@@ -330,7 +330,10 @@ class IndentationBear(LocalBear):
                                 un-indent specifiers.
         """
         specifiers = list(self.get_valid_sequences(
-            file, indent_specifier, annotation_dict))
+            file,
+            indent_specifier, annotation_dict,
+            encapsulators,
+            check_ending=True))
         _range = []
         for specifier in specifiers:
             current_line = specifier.line
@@ -353,7 +356,11 @@ class IndentationBear(LocalBear):
         return tuple(_range)
 
     @staticmethod
-    def get_valid_sequences(file, sequence, annotation_dict):
+    def get_valid_sequences(file,
+                            sequence,
+                            annotation_dict,
+                            encapsulators=None,
+                            check_ending=False):
         """
         A vaild sequence is a sequence that is outside of comments or strings.
 
@@ -362,6 +369,11 @@ class IndentationBear(LocalBear):
         :param sequence:        Sequence whose validity is to be checked.
         :param annotation_dict: A dictionary containing sourceranges of all the
                                 strings and comments within a file.
+        :param encapsulators:   A tuple of SourceRanges of code regions
+                                trapped in between a matching pair of
+                                encapsulators.
+        :param check_ending:    Check whether sequence falls at the end of the
+                                line.
         :return:                A tuple of AbsolutePosition's of all occurances
                                 of sequence outside of string's and comments.
         """
@@ -373,6 +385,7 @@ class IndentationBear(LocalBear):
             valid = True
             sequence_position = AbsolutePosition(
                                     file, sequence_match.start())
+            sequence_line_text = file[sequence_position.line - 1]
 
             # ignore if within string
             for string in annotation_dict['strings']:
@@ -384,6 +397,23 @@ class IndentationBear(LocalBear):
             for comment in annotation_dict['comments']:
                 if(gt_eq(sequence_position, comment.start) and
                    lt_eq(sequence_position, comment.end)):
+                    valid = False
+
+                if check_ending:
+                    if(comment.start.line == sequence_position.line and
+                            comment.end.line == sequence_position.line):
+                        sequence_line_text = sequence_line_text[
+                            :comment.start.column - 1] + sequence_line_text[
+                            comment.end.column-1:]
+
+            if encapsulators:
+                for encapsulator in encapsulators:
+                    if(gt_eq(sequence_position, encapsulator.start) and
+                       lt_eq(sequence_position, encapsulator.end)):
+                        valid = False
+
+            if check_ending:
+                if not sequence_line_text.rstrip().endswith(':'):
                     valid = False
 
             if valid:
